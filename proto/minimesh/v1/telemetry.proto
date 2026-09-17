@@ -2,10 +2,10 @@
 syntax = "proto3";
 
 // The package name prevent naming collisions
-package minimesh.v1
+package minimesh.v1;
 
 // This tells the complier where to put the generated Go code, and what to name the Go package
-option go_package = "mini-mesh/pb/minimesh/v1;minimesh_v1";
+option go_package = "mini-mesh/pb/minimesh/v1;minimeshv1";
 
 // TelemetryPayload represents the health metrics of a specific Edge node.
 message TelemetryPayload {
@@ -25,7 +25,7 @@ message TelemetryPayload {
 }
 
 // This is empty because CE does not need response from the RE
-message TelemetryResponse = {}
+message TelemetryResponse {}
 
 // TelemetryService defines the RPCs (Remote Procedure Calls) available.
 service TelemetryService {
