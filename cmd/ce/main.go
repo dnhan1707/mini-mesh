@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
+	"os"
 	"time"
 
 	// This is your generated contract code!
@@ -16,7 +18,11 @@ import (
 )
 
 func main() {
-	nodeID := "ce-local-laptop"
+	hostname, err := os.Hostname()
+	if err != nil {
+		log.Fatalf("Failed to get hostname: %v", err)
+	}
+	nodeID := fmt.Sprintf("ce-%s", hostname)
 	serverAddr := "localhost:50051"
 
 	log.Printf("Starting CE daemon on node: %s\n", nodeID)
@@ -31,32 +37,46 @@ func main() {
 
 	// We wrap the raw connection in our generated client interface
 	client := pb.NewTelemetryServiceClient(conn)
-
-	// context.Background() tells Go this process has no expiration date.
-	// We call the StreamTelemetry function to open the persistent HTTP/2 pipe.
-	stream, err := client.StreamTelemetry(context.Background())
-	if err != nil {
-		log.Fatalf("Failed to open telemetry stream: %v", err)
-	}
-	log.Println("Successfully opened telemetry stream to RE.")
-
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		payload, err := collectMetrics(nodeID)
+	attempt := 0
+
+	for {
+		log.Printf("Attempting to open telemetry stream...")
+		stream, err := client.StreamTelemetry(context.Background())
 		if err != nil {
-			log.Printf("Failed to collect metrics: %v", err)
+			wait := calculateWait(attempt)
+			log.Printf("Failed to open stream. Retrying in %v... Error: %v\n", wait, err)
+			time.Sleep(wait)
+
+			// Cap attempts to prevent integer overflow if it runs for months
+			if attempt < 6 {
+				attempt++
+			}
 			continue
 		}
 
-		// stream.Send() takes our generated struct, encodes it to binary,
-		// and shoves it down the open gRPC pipe.
-		if err := stream.Send(payload); err != nil {
-			log.Printf("Failed to send payload: %v\n", err)
-		} else {
-			log.Printf("Sent metrics -> CPU: %.1f%% | RAM: %dMB",
-				payload.CpuPercent, payload.UsedMemMb)
+		log.Println("Successfully established stream to RE!")
+		attempt = 0 // Reset attempts on success!
+
+		streamAlive := true
+		for streamAlive {
+			<-ticker.C // wait for 5 second tick
+			payload, err := collectMetrics(nodeID)
+			if err != nil {
+				log.Printf("Failed to collect metrics: %v\n", err)
+				continue
+			}
+
+			// If Send fails, the pipe is broken.
+			// We break the inner loop to force the outer loop to create a new stream.
+			if err := stream.Send(payload); err != nil {
+				log.Printf("Connection to RE lost. Dropping stream: %v\n", err)
+				streamAlive = false
+			} else {
+				log.Printf("Sent metrics -> CPU: %.1f%% | RAM: %dMB", payload.CpuPercent, payload.UsedMemMb)
+			}
 		}
 	}
 }
@@ -80,4 +100,14 @@ func collectMetrics(nodeID string) (*pb.TelemetryPayload, error) {
 		UsedMemMb:  vMem.Used / 1024 / 1024,
 		MemPercent: vMem.UsedPercent,
 	}, nil
+}
+
+func calculateWait(attempt int) time.Duration {
+	baseWait := time.Duration(1<<attempt) * time.Second
+	maxWait := 60 * time.Second
+	if baseWait > maxWait {
+		return maxWait
+	}
+	jitter := time.Duration(rand.Intn(1000)) * time.Millisecond
+	return baseWait + jitter
 }
