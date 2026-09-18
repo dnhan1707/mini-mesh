@@ -8,6 +8,8 @@ import (
 	"os"
 	"time"
 
+	"mini-mesh/internal/config"
+
 	// This is your generated contract code!
 	pb "mini-mesh/pb/minimesh/v1"
 
@@ -23,13 +25,13 @@ func main() {
 		log.Fatalf("Failed to get hostname: %v", err)
 	}
 	nodeID := fmt.Sprintf("ce-%s", hostname)
-	serverAddr := "localhost:50051"
+	serverAddr := config.REAddress()
 
 	log.Printf("Starting CE daemon on node: %s\n", nodeID)
 
 	// We are dialing the RE server here
 	// insecure.NewCredentials() means we are NOT using TLS/HTTPs yet
-	conn, err := grpc.Dial(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("Failed to connect to RE server: %v", err)
 	}
