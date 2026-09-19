@@ -39,7 +39,7 @@ func main() {
 
 	// We wrap the raw connection in our generated client interface
 	client := pb.NewTelemetryServiceClient(conn)
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(config.CEStreamTicker)
 	defer ticker.Stop()
 
 	attempt := 0
@@ -53,7 +53,7 @@ func main() {
 			time.Sleep(wait)
 
 			// Cap attempts to prevent integer overflow if it runs for months
-			if attempt < 6 {
+			if attempt < config.MaxRetryAttempts {
 				attempt++
 			}
 			continue
@@ -84,7 +84,7 @@ func main() {
 }
 
 func collectMetrics(nodeID string) (*pb.TelemetryPayload, error) {
-	cpuPercentages, err := cpu.Percent(500*time.Millisecond, false)
+	cpuPercentages, err := cpu.Percent(config.CPUReadInterval, false)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to read CPU: %w", err)
 	}
@@ -105,11 +105,10 @@ func collectMetrics(nodeID string) (*pb.TelemetryPayload, error) {
 }
 
 func calculateWait(attempt int) time.Duration {
-	baseWait := time.Duration(1<<attempt) * time.Second
-	maxWait := 60 * time.Second
-	if baseWait > maxWait {
-		return maxWait
+	baseWait := time.Duration(1<<attempt) * config.RetryBaseDelay
+	if baseWait > config.MaxRetryDelay {
+		return config.MaxRetryDelay
 	}
-	jitter := time.Duration(rand.Intn(1000)) * time.Millisecond
+	jitter := time.Duration(rand.Intn(int(config.RetryJitterMax/time.Millisecond))) * time.Millisecond
 	return baseWait + jitter
 }
