@@ -1,0 +1,55 @@
+# 1. The Headless Service: Creates internal DNS so the nodes can find each other
+apiVersion: v1
+kind: Service
+metadata:
+  name: elastic-dns
+spec:
+  clusterIP: None # "None" means K8s creates DNS records for each individual pod
+  selector:
+    app: elasticsearch
+  ports:
+  - port: 9200
+    name: rest
+  - port: 9300
+    name: inter-node
+---
+# 2. The StatefulSet: Deploys the actual 3-node cluster
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: es-node
+spec:
+  serviceName: "elastic-dns"
+  replicas: 3 # We are demanding exactly 3 nodes
+  selector:
+    matchLabels:
+      app: elasticsearch
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+    spec:
+      containers:
+      - name: elasticsearch
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+        ports:
+        - containerPort: 9200
+        - containerPort: 9300
+        env:
+        - name: cluster.name
+          value: "mini-mesh-logs"
+        # Dynamically grab the pod's name (e.g., es-node-0, es-node-1)
+        - name: node.name
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        # Tell the nodes how to find each other over the Headless Service DNS
+        - name: discovery.seed_hosts
+          value: "es-node-0.elastic-dns,es-node-1.elastic-dns,es-node-2.elastic-dns"
+        # Require all 3 nodes to exist before electing a master (prevents split-brain)
+        - name: cluster.initial_master_nodes
+          value: "es-node-0,es-node-1,es-node-2"
+        - name: ES_JAVA_OPTS
+          value: "-Xms512m -Xmx512m"
+        - name: xpack.security.enabled
+          value: "false"
