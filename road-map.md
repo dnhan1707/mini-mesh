@@ -1,0 +1,290 @@
+# Mini-Mesh Roadmap
+
+## Project Goal
+
+Build a small, production-quality distributed telemetry platform inspired by the
+architecture and operational concerns of F5 Distributed Cloud.
+
+The goal is not to reproduce all of F5XC. The goal is to learn how to keep a
+distributed system running, observable, recoverable, and understandable during
+failure.
+
+## Target Architecture
+
+```text
+CE agents
+	|
+	| gRPC telemetry
+	v
+Regional Edge (RE)
+	|
+	| gRPC stream
+	v
+Global Controller (GC)
+	|
+	| Kafka events
+	v
+Kafka cluster
+	|
+	| consumer group
+	v
+Telemetry Indexer
+	|
+	v
+Elasticsearch
+	|
+	v
+Query API / dashboard
+```
+
+## Operating Principles
+
+- [ ] Define the responsibility of every component before implementing it.
+- [ ] Prefer a small working system over many partially connected technologies.
+- [ ] Treat Kafka as the durable event backbone.
+- [ ] Treat Elasticsearch as a searchable projection, not the source of truth.
+- [ ] Make failure behavior explicit and test it deliberately.
+- [ ] Instrument the platform itself, not only the edge nodes.
+- [ ] Document every reliability decision and its tradeoff.
+
+## Phase 0: Define the System
+
+- [ ] Define the telemetry event schema.
+- [ ] Define what it means for telemetry to be accepted.
+- [ ] Define what happens when CE, RE, GC, Kafka, or Elasticsearch is unavailable.
+- [ ] Define the acceptable data-loss and data-delay behavior.
+- [ ] Define the initial service-level objectives:
+  - [ ] 99% of telemetry searchable within 30 seconds.
+  - [ ] No accepted events lost during an Elasticsearch restart.
+  - [ ] CE reconnects within 60 seconds after recovery.
+  - [ ] Kafka consumer lag has a defined limit.
+- [ ] Write down the first failure scenarios to test.
+
+## Phase 1: Build a Single-Node Vertical Slice
+
+Start with the smallest complete system. Do not use Kafka or Elasticsearch yet.
+
+```text
+CE -> GC -> in-memory storage -> query endpoint
+```
+
+- [ ] Create the repository structure from scratch.
+- [ ] Define the protobuf telemetry contract.
+- [ ] Implement CE metric collection.
+- [ ] Implement CE-to-GC gRPC streaming.
+- [ ] Implement reconnect and exponential backoff.
+- [ ] Add context cancellation and graceful shutdown.
+- [ ] Add a GC health endpoint.
+- [ ] Add a GC readiness endpoint.
+- [ ] Add a basic query endpoint for the latest node state.
+- [ ] Add structured service logs.
+- [ ] Add unit tests for collection, streaming, and reconnect behavior.
+
+### Phase 1 Acceptance Test
+
+- [ ] Start CE and GC.
+- [ ] Query telemetry through the API.
+- [ ] Stop GC.
+- [ ] Confirm CE reports or detects the failure.
+- [ ] Restart GC.
+- [ ] Confirm CE reconnects and telemetry resumes.
+
+## Phase 2: Add the Regional Edge
+
+```text
+CE -> RE -> GC
+```
+
+- [ ] Implement RE as a forwarding service.
+- [ ] Add separate CE-to-RE and RE-to-GC connection handling.
+- [ ] Propagate cancellation and deadlines across both hops.
+- [ ] Define behavior when GC is unavailable.
+- [ ] Define behavior when RE is unavailable.
+- [ ] Add correlation IDs to telemetry flow logs.
+- [ ] Add metrics for active streams and forwarded events.
+- [ ] Add tests for graceful disconnects and broken streams.
+
+### Phase 2 Acceptance Test
+
+- [ ] Stop RE.
+- [ ] Confirm CE retries.
+- [ ] Restart RE.
+- [ ] Confirm RE reconnects to GC.
+- [ ] Confirm telemetry eventually reaches GC.
+- [ ] Confirm delayed and missing telemetry can be distinguished.
+
+## Phase 3: Deploy the Services on Kubernetes
+
+- [ ] Create Kubernetes Deployments for CE, RE, and GC.
+- [ ] Create Services for each network boundary.
+- [ ] Move runtime configuration into ConfigMaps.
+- [ ] Store credentials in Secrets.
+- [ ] Add readiness probes.
+- [ ] Add liveness probes.
+- [ ] Add resource requests and limits.
+- [ ] Add rolling update configuration.
+- [ ] Add PodDisruptionBudgets where appropriate.
+- [ ] Add graceful termination periods.
+- [ ] Document local development and deployment commands.
+
+### Phase 3 Acceptance Test
+
+- [ ] Kill a service pod.
+- [ ] Confirm Kubernetes recreates it.
+- [ ] Confirm clients reconnect.
+- [ ] Perform a rolling update.
+- [ ] Confirm telemetry remains available during the update.
+- [ ] Reschedule a pod and verify recovery.
+
+## Phase 4: Introduce Kafka
+
+```text
+GC -> Kafka
+```
+
+- [ ] Define the telemetry topic and retention policy.
+- [ ] Use a replication factor of 3.
+- [ ] Configure `min.insync.replicas=2`.
+- [ ] Partition by `node_id` to preserve per-node ordering.
+- [ ] Add stable event IDs.
+- [ ] Add event creation timestamps.
+- [ ] Configure producer acknowledgements.
+- [ ] Add producer success and failure metrics.
+- [ ] Define behavior when Kafka is unavailable.
+- [ ] Document topic creation and inspection commands.
+- [ ] Verify records using a Kafka consumer.
+
+### Phase 4 Acceptance Test
+
+- [ ] Stop the future downstream consumer.
+- [ ] Confirm GC can continue publishing to Kafka.
+- [ ] Stop one Kafka broker.
+- [ ] Confirm the cluster remains available.
+- [ ] Restart the broker.
+- [ ] Confirm telemetry continues without silent loss.
+- [ ] Inspect offsets and verify records are present.
+
+## Phase 5: Add the Elasticsearch Indexer
+
+```text
+Kafka -> Telemetry Indexer -> Elasticsearch
+```
+
+- [ ] Create a separate indexer service.
+- [ ] Consume with a named Kafka consumer group.
+- [ ] Deserialize telemetry events.
+- [ ] Convert events into structured JSON documents.
+- [ ] Define Elasticsearch mappings.
+- [ ] Use bulk indexing.
+- [ ] Commit Kafka offsets only after successful indexing.
+- [ ] Retry transient Elasticsearch failures.
+- [ ] Create a dead-letter topic for invalid events.
+- [ ] Make indexing idempotent.
+- [ ] Add index naming and retention policy.
+- [ ] Add indexing success, failure, and latency metrics.
+- [ ] Add consumer lag metrics.
+
+### Phase 5 Acceptance Test
+
+- [ ] Stop Elasticsearch.
+- [ ] Confirm Kafka continues receiving telemetry.
+- [ ] Observe indexer lag increasing.
+- [ ] Restart Elasticsearch.
+- [ ] Confirm the indexer catches up.
+- [ ] Verify accepted events are eventually searchable.
+- [ ] Send an invalid event and verify dead-letter handling.
+
+## Phase 6: Observe the Platform
+
+- [ ] Add Prometheus metrics to CE, RE, GC, and the indexer.
+- [ ] Add Grafana dashboards.
+- [ ] Add structured JSON logs.
+- [ ] Add correlation IDs across services.
+- [ ] Add request and processing latency measurements.
+- [ ] Add alerts for:
+  - [ ] Service unavailable.
+  - [ ] Kafka publish failures.
+  - [ ] Consumer lag too high.
+  - [ ] Elasticsearch indexing failures.
+  - [ ] Stale node telemetry.
+  - [ ] Reconnect rate too high.
+- [ ] Create a dashboard for node health.
+- [ ] Create a dashboard for pipeline health.
+- [ ] Document the first troubleshooting runbook.
+
+### Phase 6 Acceptance Test
+
+- [ ] Use the dashboards to identify a stopped service.
+- [ ] Use metrics to distinguish ingestion failure from indexing delay.
+- [ ] Use logs and correlation IDs to trace one event across the system.
+- [ ] Trigger an alert intentionally and resolve it.
+
+## Phase 7: Add Control-Plane Behavior
+
+Move from observation only to a small desired-state system.
+
+- [ ] Define desired state and reported state.
+- [ ] Add a configuration version.
+- [ ] Add a small control API.
+- [ ] Propagate configuration from GC to RE and CE.
+- [ ] Add acknowledgements.
+- [ ] Add safe rollout behavior.
+- [ ] Add rollback behavior.
+- [ ] Add audit events for configuration changes.
+
+Example configuration values:
+
+- [ ] Telemetry sampling interval.
+- [ ] Enabled collectors.
+- [ ] Node labels.
+- [ ] Maintenance mode.
+
+## Phase 8: Security and Hardening
+
+- [ ] Enable TLS for gRPC.
+- [ ] Add Kafka authentication and encryption.
+- [ ] Add Elasticsearch authentication.
+- [ ] Move all credentials to Kubernetes Secrets.
+- [ ] Add Kubernetes service accounts and RBAC.
+- [ ] Add network policies.
+- [ ] Validate and limit incoming payloads.
+- [ ] Add rate limiting.
+- [ ] Bound all internal queues and buffers.
+- [ ] Review resource limits under load.
+- [ ] Test backup and restore.
+- [ ] Test certificate rotation.
+
+## Final Failure-Test Matrix
+
+- [ ] CE process stops.
+- [ ] RE process stops.
+- [ ] GC process stops.
+- [ ] Kafka broker stops.
+- [ ] Elasticsearch stops.
+- [ ] Indexer stops.
+- [ ] Network latency increases.
+- [ ] Network partition occurs.
+- [ ] Disk becomes full.
+- [ ] Invalid telemetry is sent.
+- [ ] A rolling deployment occurs during traffic.
+- [ ] A node is rescheduled to another Kubernetes worker.
+
+For every failure, record:
+
+- [ ] What the user observes.
+- [ ] What data is delayed, lost, or replayed.
+- [ ] How the system recovers.
+- [ ] Which metric detects the problem.
+- [ ] Which alert fires.
+- [ ] What an operator does to resolve it.
+
+## Definition of Done
+
+- [ ] The system has a documented architecture.
+- [ ] Each service has a single clear responsibility.
+- [ ] Telemetry survives downstream Elasticsearch outages through Kafka.
+- [ ] Consumer lag and indexing health are visible.
+- [ ] Services recover from restarts without manual data repair.
+- [ ] Alerts identify the major failure modes.
+- [ ] Runbooks explain how to diagnose and recover the system.
+- [ ] Every major reliability claim has an executable test.
