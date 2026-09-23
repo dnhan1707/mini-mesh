@@ -68,17 +68,17 @@ Start with the smallest complete system. Do not use Kafka or Elasticsearch yet.
 CE -> GC -> in-memory storage -> query endpoint
 ```
 
-- [ ] Create the repository structure from scratch.
-- [ ] Define the protobuf telemetry contract.
-- [ ] Implement CE metric collection.
-- [ ] Implement CE-to-GC gRPC streaming.
-- [ ] Implement reconnect and exponential backoff.
-- [ ] Add context cancellation and graceful shutdown.
-- [ ] Add a GC health endpoint.
-- [ ] Add a GC readiness endpoint.
-- [ ] Add a basic query endpoint for the latest node state.
-- [ ] Add structured service logs.
-- [ ] Add unit tests for collection, streaming, and reconnect behavior.
+- [x] Create the repository structure from scratch.
+- [x] Define the protobuf telemetry contract.
+- [x] Implement CE metric collection.
+- [x] Implement CE-to-GC gRPC streaming.
+- [x] Implement reconnect and exponential backoff.
+- [x] Add context cancellation and graceful shutdown.
+- [x] Add a GC health endpoint.
+- [x] Add a GC readiness endpoint.
+- [x] Add a basic query endpoint for the latest node state.
+- [x] Add structured service logs.
+- [x] Add unit tests for collection, streaming, and reconnect behavior.
 
 ### Phase 1 Acceptance Test
 
@@ -95,23 +95,23 @@ CE -> GC -> in-memory storage -> query endpoint
 CE -> RE -> GC
 ```
 
-- [ ] Implement RE as a forwarding service.
-- [ ] Add separate CE-to-RE and RE-to-GC connection handling.
-- [ ] Propagate cancellation and deadlines across both hops.
-- [ ] Define behavior when GC is unavailable.
-- [ ] Define behavior when RE is unavailable.
-- [ ] Add correlation IDs to telemetry flow logs.
-- [ ] Add metrics for active streams and forwarded events.
-- [ ] Add tests for graceful disconnects and broken streams.
+- [x] Implement RE as a forwarding service.
+- [x] Add separate CE-to-RE and RE-to-GC connection handling.
+- [ ] Propagate cancellation and deadlines across both hops. (Cancellation propagates cleanly via context chains through `reconnect.Run`; per-event *deadlines* don't fit naturally on a long-lived client-streaming RPC — deadlines apply to the whole RPC, not individual sends. Left unaddressed rather than overclaimed.)
+- [x] Define behavior when GC is unavailable. (RE buffers up to 500 events in a bounded queue, dropping oldest on overflow, and keeps retrying GC with backoff.)
+- [x] Define behavior when RE is unavailable. (CE tries an ordered list of RE addresses each reconnect cycle, failing back to the first/"closest" address every attempt, with exponential backoff once the whole list is exhausted.)
+- [x] Add correlation IDs to telemetry flow logs. (`event_id` is logged by CE on send, RE on receive/enqueue, RE on forward, and GC on receive — usable as the correlation key across all three services.)
+- [x] Add metrics for active streams and forwarded events. (RE's `/debug/queue` HTTP endpoint reports `queue_depth`, `dropped_total`, `forwarded_total`; real Prometheus metrics land in Phase 6.)
+- [x] Add tests for graceful disconnects and broken streams.
 
 ### Phase 2 Acceptance Test
 
-- [ ] Stop RE.
-- [ ] Confirm CE retries.
-- [ ] Restart RE.
-- [ ] Confirm RE reconnects to GC.
-- [ ] Confirm telemetry eventually reaches GC.
-- [ ] Confirm delayed and missing telemetry can be distinguished.
+- [x] Stop RE.
+- [x] Confirm CE retries.
+- [x] Restart RE.
+- [x] Confirm RE reconnects to GC.
+- [x] Confirm telemetry eventually reaches GC.
+- [x] Confirm delayed and missing telemetry can be distinguished.
 
 ## Phase 3: Deploy the Services on Kubernetes
 

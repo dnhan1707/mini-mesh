@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package mini_mesh.telemetry.v1;
+
+option go_package = "mini-mesh/pb/telemetry/v1;telemetryv1";
+
+import "google/protobuf/timestamp.proto";
+
+// One point-in-time snapshot of a node's system metrics.
+message TelemetryEvent {
+  string event_id = 1;
+  string node_id = 2;
+  google.protobuf.Timestamp collected_at = 3;
+  SystemMetrics metrics = 4;
+}
+
+message SystemMetrics {
+  double cpu_percent = 1;
+  uint64 memory_used_bytes = 2;
+  uint64 memory_total_bytes = 3;
+  uint64 disk_used_bytes = 4;
+  uint64 disk_total_bytes = 5;
+}
+
+// Sent by GC once a stream of events has been accepted.
+message StreamTelemetryResponse {
+  uint32 events_received = 1;
+}
+
+service TelemetryIngest {
+  // CE opens one long-lived stream and pushes events; GC acks once at the end.
+  rpc StreamTelemetry(stream TelemetryEvent) returns (StreamTelemetryResponse);
+}

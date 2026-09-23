@@ -1,0 +1,11 @@
+# This tells Buf: "Run the go and go-grpc plugins, and output the generated code right here in the project, matching the Go module name."
+version: v1
+plugins:
+  # Generate the standard Go structs
+  - plugin: go
+    out: .
+    opt: module=mini-mesh
+  # Generate the gRPCE networking functions
+  - plugin: go-grpc
+    out: .
+    opt: module=mini-mesh
