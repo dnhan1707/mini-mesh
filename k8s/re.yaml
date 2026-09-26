@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: re
+  namespace: mini-mesh
+  labels:
+    app: re
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: re
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: re
+    spec:
+      terminationGracePeriodSeconds: 15
+      containers:
+        - name: re
+          image: mini-mesh/re:v1
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: mini-mesh-config
+          ports:
+            - name: grpc
+              containerPort: 50052
+            - name: http
+              containerPort: 8081
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: re
+  namespace: mini-mesh
+spec:
+  selector:
+    app: re
+  ports:
+    - name: grpc
+      port: 50052
+      targetPort: grpc
+    - name: http
+      port: 8081
+      targetPort: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: re
+  namespace: mini-mesh
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: re

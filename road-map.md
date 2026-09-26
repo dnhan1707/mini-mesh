@@ -115,26 +115,26 @@ CE -> RE -> GC
 
 ## Phase 3: Deploy the Services on Kubernetes
 
-- [ ] Create Kubernetes Deployments for CE, RE, and GC.
-- [ ] Create Services for each network boundary.
-- [ ] Move runtime configuration into ConfigMaps.
-- [ ] Store credentials in Secrets.
-- [ ] Add readiness probes.
-- [ ] Add liveness probes.
-- [ ] Add resource requests and limits.
-- [ ] Add rolling update configuration.
-- [ ] Add PodDisruptionBudgets where appropriate.
-- [ ] Add graceful termination periods.
+- [x] Create Kubernetes Deployments for CE, RE, and GC.
+- [x] Create Services for each network boundary. (`gc`, `re` ClusterIP Services; CE has no listener, so no Service.)
+- [x] Move runtime configuration into ConfigMaps. (`mini-mesh-config`: `GC_ADDRS`, `RE_ADDRS` using in-cluster DNS names.)
+- [ ] Store credentials in Secrets. (No credentials exist yet — everything is insecure/plaintext gRPC. Revisit in Phase 9 security hardening.)
+- [x] Add readiness probes. (GC and RE `/readyz`; CE has no HTTP listener so no probe is possible yet.)
+- [x] Add liveness probes. (GC and RE `/healthz`; same CE caveat.)
+- [x] Add resource requests and limits.
+- [x] Add rolling update configuration. (`maxUnavailable: 0, maxSurge: 1` on all three Deployments.)
+- [x] Add PodDisruptionBudgets where appropriate. (GC and RE, `minAvailable: 1` — intentionally blocks voluntary eviction until replicated further.)
+- [x] Add graceful termination periods. (`terminationGracePeriodSeconds: 15`, backed by the Phase 2 bounded GracefulStop fix.)
 - [ ] Document local development and deployment commands.
 
 ### Phase 3 Acceptance Test
 
-- [ ] Kill a service pod.
-- [ ] Confirm Kubernetes recreates it.
-- [ ] Confirm clients reconnect.
-- [ ] Perform a rolling update.
-- [ ] Confirm telemetry remains available during the update.
-- [ ] Reschedule a pod and verify recovery.
+- [x] Kill a service pod. (`kubectl delete pod -l app=re`; recreated in ~13s.)
+- [x] Confirm Kubernetes recreates it.
+- [x] Confirm clients reconnect. (CE logged single `WARN EOF` then recovered within ~2s.)
+- [x] Perform a rolling update. (`kubectl rollout restart deployment/re`; new pod ready before old terminated, zero dropped-connection window beyond the same single EOF/retry.)
+- [x] Confirm telemetry remains available during the update.
+- [x] Reschedule a pod and verify recovery. (Scaled RE to 2 replicas, cordoned + drained `desktop-worker2`; PDB `minAvailable: 1` correctly blocked eviction until the 2nd replica existed. Evicted pod recreated on `desktop-worker`. Scaled back to 1, uncordoned node.)
 
 ## Phase 4: Introduce Kafka
 

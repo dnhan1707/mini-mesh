@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mini-mesh-config
+  namespace: mini-mesh
+data:
+  # RE dials GC by its in-cluster Service DNS name.
+  GC_ADDRS: "gc:50051"
+  # CE dials RE by its in-cluster Service DNS name.
+  RE_ADDRS: "re:50052"
